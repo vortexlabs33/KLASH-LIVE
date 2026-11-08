@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KLASH Live Scores Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #161e2e;
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --accent-live: #f43f5e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 12px;
+            padding-bottom: 50px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        h1 {
+            font-size: 1.4rem;
+            margin: 0 0 2px 0;
+            color: var(--accent-blue);
+        }
+        .subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        /* League Selector Tabs */
+        .league-tabs {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+            scrollbar-width: none;
+        }
+        .league-tabs::-webkit-scrollbar {
+            display: none;
+        }
+        .league-tab {
+            background-color: var(--card-bg);
+            color: var(--text-muted);
+            border: 1px solid #334155;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .league-tab.active {
+            background-color: #0284c7;
+            color: white;
+            border-color: #0284c7;
+        }
+        .league-section {
+            margin-bottom: 20px;
+        }
+        .league-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-blue);
+            margin-bottom: 8px;
+            padding-left: 4px;
+            border-left: 3px solid var(--accent-blue);
+        }
+        .match-card {
+            background-color: var(--card-bg);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .match-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .status-live {
+            color: var(--accent-live);
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+        .teams-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .team-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .team-name.home {
+            text-align: left;
+        }
+        .team-name.away {
+            text-align: right;
+        }
+        .score-box {
+            background-color: #0f172a;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            color: var(--accent-green);
+            font-size: 1.1rem;
+            margin: 0 10px;
+            min-width: 45px;
+            text-align: center;
+        }
+        .loading, .empty-msg {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>⚽ KLASH Live Scores</h1>
+        <div class="subtitle">KLASH WORLD Global & NPFL Tracker</div>
+    </header>
+
+    <!-- League Selector Tabs -->
+    <div class="league-tabs">
+        <button class="league-tab active" onclick="switchLeague('39', 'Premier League', this)">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</button>
+        <button class="league-tab" onclick="switchLeague('327', 'Nigeria Premier League (NPFL)', this)">🇳🇬 NPFL</button>
+        <button class="league-tab" onclick="switchLeague('2', 'UEFA Champions League', this)">🇪🇺 Champions League</button>
+        <button class="league-tab" onclick="switchLeague('140', 'La Liga', this)">🇪🇸 La Liga</button>
+        <button class="league-tab" onclick="switchLeague('135', 'Serie A', this)">🇮🇹 Serie A</button>
+        <button class="league-tab" onclick="switchLeague('78', 'Bundesliga', this)">🇩🇪 Bundesliga</button>
+    </div>
+
+    <!-- Dynamic Matches Container -->
+    <div id="dashboard-container">
+        <div class="loading">Select a league to load live fixtures...</div>
+    </div>
+
+    <script>
+        const RAPID_API_KEY = '6a219dec22msh2ebc0fe1201c7a3p10f11';
+        const RAPID_API_HOST = 'api-football-v1.p.rapidapi.com';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            switchLeague('39', 'Premier League', document.querySelector('.league-tab'));
+        });
+
+        function switchLeague(leagueId, leagueTitle, btnElement) {
+            document.querySelectorAll('.league-tab').forEach(tab => tab.classList.remove('active'));
+            btnElement.classList.add('active');
+
+            fetchRealRapidApiFixtures(leagueId, leagueTitle);
+        }
+
+        async function fetchRealRapidApiFixtures(leagueId, leagueTitle) {
+            const container = document.getElementById('dashboard-container');
+            container.innerHTML = `<div class="loading">Fetching live ${leagueTitle} data from RapidAPI...</div>`;
+
+            const currentYear = new Date().getFullYear();
+            const url = `https://${RAPID_API_HOST}/v3/fixtures?league=${leagueId}&season=${currentYear}&last=10`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-RapidAPI-Key': RAPID_API_KEY,
+                        'X-RapidAPI-Host': RAPID_API_HOST
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderMatches(leagueTitle, data.response);
+            } catch (err) {
+                console.error("Fetch error:", err);
+                container.innerHTML = `
+                    <div class="empty-msg" style="color: #f43f5e;">
+                        Unable to fetch directly. If testing locally in Acode, deploy to your GitHub Pages site to allow HTTPS domain authentication.
+                    </div>`;
+            }
+        }
+
+        function renderMatches(leagueName, fixtures) {
+            const container = document.getElementById('dashboard-container');
+
+            if (!fixtures || fixtures.length === 0) {
+                container.innerHTML = `<div class="empty-msg">No recent matches found for ${leagueName}.</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+
+            const section = document.createElement('div');
+            section.className = 'league-section';
+
+            let cardsHtml = `<div class="league-header">🏆 ${leagueName}</div>`;
+
+            fixtures.forEach(item => {
+                const homeTeam = item.teams.home.name;
+                const awayTeam = item.teams.away.name;
+                const homeScore = item.goals.home ?? '-';
+                const awayScore = item.goals.away ?? '-';
+                
+                const shortStatus = item.fixture.status.short;
+                let statusDisplay = shortStatus;
+
+                if (['1H', '2H', 'ET', 'P', 'LIVE'].includes(shortStatus)) {
+                    statusDisplay = `<span class="status-live">● ${item.fixture.status.elapsed || ''}'</span>`;
+                } else if (shortStatus === 'FT') {
+                    statusDisplay = 'FT';
+                } else {
+                    statusDisplay = new Date(item.fixture.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+                                    new Date(item.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                const roundInfo = item.league.round || '';
+
+                cardsHtml += `
+                    <div class="match-card">
+                        <div class="match-info">
+                            <span>${roundInfo}</span>
+                            <span>${statusDisplay}</span>
+                        </div>
+                        <div class="teams-row">
+                            <span class="team-name home" title="${homeTeam}">${homeTeam}</span>
+                            <span class="score-box">${homeScore} : ${awayScore}</span>
+                            <span class="team-name away" title="${awayTeam}">${awayTeam}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            section.innerHTML = cardsHtml;
+            container.appendChild(section);
+        }
+    </script>
+</body>
+</html>
